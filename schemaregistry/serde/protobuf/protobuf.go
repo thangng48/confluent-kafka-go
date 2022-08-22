@@ -62,6 +62,8 @@ import (
 // Serializer represents a Protobuf serializer
 type Serializer struct {
 	serde.BaseSerializer
+
+	cachedMetadata map[string]schemaregistry.SchemaMetadata
 }
 
 // Deserializer represents a Protobuf deserializer
@@ -126,7 +128,9 @@ func init() {
 
 // NewSerializer creates a Protobuf serializer for Protobuf-generated objects
 func NewSerializer(client schemaregistry.Client, serdeType serde.Type, conf *SerializerConfig) (*Serializer, error) {
-	s := &Serializer{}
+	s := &Serializer{
+		cachedMetadata: map[string]schemaregistry.SchemaMetadata{},
+	}
 	err := s.ConfigureSerializer(client, serdeType, &conf.SerializerConfig)
 	if err != nil {
 		return nil, err
@@ -148,7 +152,29 @@ func (s *Deserializer) ConfigureDeserializer(client schemaregistry.Client, serde
 	return nil
 }
 
+func (s *Serializer) RegisterDataType(message proto.Message) error {
+	descName := string(message.ProtoReflect().Descriptor().FullName().Name())
+	metadata, ok := s.cachedMetadata[descName]
+	if !ok {
+		messageDesc, err := desc.LoadMessageDescriptorForMessage(protoV1.MessageV1(message))
+		fileDesc, deps, err := s.toProtobufSchema(messageDesc)
+		if err != nil {
+			return err
+		}
+
+		metadata, err = s.resolveDependencies(fileDesc, deps, "",
+			s.Conf.AutoRegisterSchemas, s.Conf.NormalizeSchemas)
+		if err != nil {
+			return err
+		}
+		s.cachedMetadata[descName] = metadata
+	}
+
+	return nil
+}
+
 // Serialize implements serialization of Protobuf data
+// must call RegisterDataType for corresponding data type first
 func (s *Serializer) Serialize(topic string, msg interface{}) ([]byte, error) {
 	if msg == nil {
 		return nil, nil
@@ -160,16 +186,13 @@ func (s *Serializer) Serialize(topic string, msg interface{}) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("serialization target must be a protobuf message. Got '%v'", t)
 	}
-	autoRegister := s.Conf.AutoRegisterSchemas
-	normalize := s.Conf.NormalizeSchemas
-	fileDesc, deps, err := s.toProtobufSchema(protoMsg)
-	if err != nil {
-		return nil, err
+
+	descName := string(protoMsg.ProtoReflect().Descriptor().FullName().Name())
+	metadata, ok := s.cachedMetadata[descName]
+	if !ok {
+		return nil, fmt.Errorf("must register data type first")
 	}
-	metadata, err := s.resolveDependencies(fileDesc, deps, "", autoRegister, normalize)
-	if err != nil {
-		return nil, err
-	}
+
 	info := schemaregistry.SchemaInfo{
 		Schema:     metadata.Schema,
 		SchemaType: metadata.SchemaType,
@@ -191,15 +214,10 @@ func (s *Serializer) Serialize(topic string, msg interface{}) ([]byte, error) {
 	return payload, nil
 }
 
-func (s *Serializer) toProtobufSchema(msg proto.Message) (*desc.FileDescriptor, map[string]string, error) {
-	messageDesc, err := desc.LoadMessageDescriptorForMessage(protoV1.MessageV1(msg))
+func (s *Serializer) toProtobufSchema(messageDesc *desc.MessageDescriptor) (*desc.FileDescriptor, map[string]string, error) {
 	fileDesc := messageDesc.GetFile()
-	if err != nil {
-		return nil, nil, err
-	}
 	deps := make(map[string]string)
-	err = s.toDependencies(fileDesc, deps)
-	if err != nil {
+	if err := s.toDependencies(fileDesc, deps); err != nil {
 		return nil, nil, err
 	}
 	return fileDesc, deps, nil
