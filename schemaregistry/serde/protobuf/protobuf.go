@@ -162,7 +162,7 @@ func (s *Serializer) RegisterDataType(message proto.Message) error {
 		if err != nil {
 			return err
 		}
-		fileDesc, deps, err := s.toProtobufSchema(messageDesc)
+		fileDesc, deps, err := s.toProtobufSchemaFromMessageDescriptor(messageDesc)
 		if err != nil {
 			return err
 		}
@@ -219,10 +219,25 @@ func (s *Serializer) Serialize(topic string, msg interface{}) ([]byte, error) {
 	return payload, nil
 }
 
-func (s *Serializer) toProtobufSchema(messageDesc *desc.MessageDescriptor) (*desc.FileDescriptor, map[string]string, error) {
+func (s *Serializer) toProtobufSchemaFromMessageDescriptor(messageDesc *desc.MessageDescriptor) (
+	*desc.FileDescriptor, map[string]string, error) {
 	fileDesc := messageDesc.GetFile()
 	deps := make(map[string]string)
 	if err := s.toDependencies(fileDesc, deps); err != nil {
+		return nil, nil, err
+	}
+	return fileDesc, deps, nil
+}
+
+func (s *Serializer) toProtobufSchema(msg proto.Message) (*desc.FileDescriptor, map[string]string, error) {
+	messageDesc, err := desc.LoadMessageDescriptorForMessage(protoV1.MessageV1(msg))
+	fileDesc := messageDesc.GetFile()
+	if err != nil {
+		return nil, nil, err
+	}
+	deps := make(map[string]string)
+	err = s.toDependencies(fileDesc, deps)
+	if err != nil {
 		return nil, nil, err
 	}
 	return fileDesc, deps, nil
