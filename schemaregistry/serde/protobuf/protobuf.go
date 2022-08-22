@@ -152,11 +152,16 @@ func (s *Deserializer) ConfigureDeserializer(client schemaregistry.Client, serde
 	return nil
 }
 
+// RegisterDataType resolves message dependencies to build schema registry metadata, then add it to local cache.
+// Must call this method before you want to call Serialize for corresponding message data type
 func (s *Serializer) RegisterDataType(message proto.Message) error {
 	descName := string(message.ProtoReflect().Descriptor().FullName().Name())
 	metadata, ok := s.cachedMetadata[descName]
 	if !ok {
 		messageDesc, err := desc.LoadMessageDescriptorForMessage(protoV1.MessageV1(message))
+		if err != nil {
+			return err
+		}
 		fileDesc, deps, err := s.toProtobufSchema(messageDesc)
 		if err != nil {
 			return err
