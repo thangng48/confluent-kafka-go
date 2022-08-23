@@ -36,6 +36,9 @@ func TestProtobufSerdeWithSimple(t *testing.T) {
 	ser, err := NewSerializer(client, serde.ValueSerde, NewSerializerConfig())
 	serde.MaybeFail("Serializer configuration", err)
 
+	err = ser.RegisterDataType(&test.Author{})
+	serde.MaybeFail("Serializer registers data type", err)
+
 	obj := test.Author{
 		Name:  "Kafka",
 		Id:    123,
@@ -65,6 +68,9 @@ func TestProtobufSerdeWithSecondMessage(t *testing.T) {
 	ser, err := NewSerializer(client, serde.ValueSerde, NewSerializerConfig())
 	serde.MaybeFail("Serializer configuration", err)
 
+	err = ser.RegisterDataType(&test.Pizza{})
+	serde.MaybeFail("Serializer registers data type", err)
+
 	obj := test.Pizza{
 		Size:     "Extra extra large",
 		Toppings: []string{"anchovies", "mushrooms"},
@@ -93,6 +99,9 @@ func TestProtobufSerdeWithNestedMessage(t *testing.T) {
 	ser, err := NewSerializer(client, serde.ValueSerde, NewSerializerConfig())
 	serde.MaybeFail("Serializer configuration", err)
 
+	err = ser.RegisterDataType(&test.NestedMessage_InnerMessage{})
+	serde.MaybeFail("Serializer registers data type", err)
+
 	obj := test.NestedMessage_InnerMessage{
 		Id: "inner",
 	}
@@ -119,6 +128,9 @@ func TestProtobufSerdeWithReference(t *testing.T) {
 
 	ser, err := NewSerializer(client, serde.ValueSerde, NewSerializerConfig())
 	serde.MaybeFail("Serializer configuration", err)
+
+	err = ser.RegisterDataType(&test.DependencyMessage{})
+	serde.MaybeFail("Serializer registers data type", err)
 
 	msg := test.TestMessage{
 		TestString:   "hi",
@@ -164,6 +176,9 @@ func TestProtobufSerdeWithCycle(t *testing.T) {
 
 	ser, err := NewSerializer(client, serde.ValueSerde, NewSerializerConfig())
 	serde.MaybeFail("Serializer configuration", err)
+
+	err = ser.RegisterDataType(&test.LinkedList{})
+	serde.MaybeFail("Serializer registers data type", err)
 
 	inner := test.LinkedList{
 		Value: 100,
